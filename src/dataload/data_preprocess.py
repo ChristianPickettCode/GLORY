@@ -15,7 +15,6 @@ import torch
 import json
 import itertools
 
-
 def update_dict(target_dict, key, value=None):
     """
     Function for updating dict with key / key+value

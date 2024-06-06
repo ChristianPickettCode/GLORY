@@ -12,21 +12,21 @@ from dataload.dataset import *
 
 def load_data(cfg, mode='train', model=None, local_rank=0):
     data_dir = {"train": cfg.dataset.train_dir, "val": cfg.dataset.val_dir, "test": cfg.dataset.test_dir}
+    device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
 
     # ------------- load news.tsv-------------
     news_index = pickle.load(open(Path(data_dir[mode]) / "news_dict.bin", "rb"))
-
     news_input = pickle.load(open(Path(data_dir[mode]) / "nltk_token_news.bin", "rb"))
+    
     # ------------- load behaviors_np{X}.tsv --------------
     if mode == 'train':
         target_file = Path(data_dir[mode]) / f"behaviors_np{cfg.npratio}_{local_rank}.tsv"
         if cfg.model.use_graph:
-            news_graph = torch.load(Path(data_dir[mode]) / "nltk_news_graph.pt")
+            news_graph = torch.load(Path(data_dir[mode]) / "nltk_news_graph.pt", map_location=device)
 
             if cfg.model.directed is False:
                 news_graph.edge_index, news_graph.edge_attr = to_undirected(news_graph.edge_index, news_graph.edge_attr)
             print(f"[{mode}] News Graph Info: {news_graph}")
-
 
             news_neighbors_dict = pickle.load(open(Path(data_dir[mode]) / "news_neighbor_dict.bin", "rb"))
 
@@ -73,14 +73,14 @@ def load_data(cfg, mode='train', model=None, local_rank=0):
         with torch.no_grad():
             for news_batch in tqdm(news_dataloader, desc=f"[{local_rank}] Processing validation News Embedding"):
                 if cfg.model.use_graph:
-                    batch_emb = model.module.local_news_encoder(news_batch.long().unsqueeze(0).to(local_rank)).squeeze(0).detach()
+                    batch_emb = model.module.local_news_encoder(news_batch.long().unsqueeze(0).to(device)).squeeze(0).detach()
                 else:
-                    batch_emb = model.module.local_news_encoder(news_batch.long().unsqueeze(0).to(local_rank)).squeeze(0).detach()
+                    batch_emb = model.module.local_news_encoder(news_batch.long().unsqueeze(0).to(device)).squeeze(0).detach()
                 stacked_news.append(batch_emb)
         news_emb = torch.cat(stacked_news, dim=0).cpu().numpy()   
 
         if cfg.model.use_graph:
-            news_graph = torch.load(Path(data_dir[mode]) / "nltk_news_graph.pt")
+            news_graph = torch.load(Path(data_dir[mode]) / "nltk_news_graph.pt", map_location=device)
 
             news_neighbors_dict = pickle.load(open(Path(data_dir[mode]) / "news_neighbor_dict.bin", "rb"))
 
@@ -89,7 +89,6 @@ def load_data(cfg, mode='train', model=None, local_rank=0):
             print(f"[{mode}] News Graph Info: {news_graph}")
 
             if cfg.model.use_entity:
-                # entity_graph = torch.load(Path(data_dir[mode]) / "entity_graph.pt")
                 entity_neighbors = pickle.load(open(Path(data_dir[mode]) / "entity_neighbor_dict.bin", "rb"))
                 total_length = sum(len(lst) for lst in entity_neighbors.values())
                 print(f"[{mode}] entity_neighbor list Length: {total_length}")
@@ -131,8 +130,6 @@ def load_data(cfg, mode='train', model=None, local_rank=0):
 
             dataloader = DataLoader(dataset,
                                     batch_size=1,
-                                    # batch_size=int(cfg.batch_   size / cfg.gpu_num),
-                                    # pin_memory=True, # collate_fn already puts data to GPU
                                     collate_fn=lambda b: collate_fn(b, local_rank))
         return dataloader
 

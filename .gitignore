@@ -19,3 +19,7 @@ multirun/
 outputs/
 pred/
 mlruns/
+
+MINDlarge/
+MINDsmall/
+glove/
